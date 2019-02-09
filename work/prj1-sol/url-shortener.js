@@ -4,8 +4,10 @@ class UrlShortener {
 
   /** Create a URL shortener with SHORTENER_DOMAIN set to domain. */
   constructor(domain) { 
-    this.SHORTENER_DOMAIN = domain;
-    console.log("PLEASE POOP");
+    this.SHORTENER_DOMAIN = domain.toLowerCase();
+    this.URL_MAP = {};
+    this.LONG_ACCESS = {};
+    this.SHORT_ACCESS = {};
   }
 
   /** 
@@ -51,8 +53,27 @@ class UrlShortener {
    *   'DOMAIN':     shortUrl domain is equal to SHORTENER_DOMAIN.
    */
   add(longUrl) {
-    //@TOD
-    return { error: { code: 'TODO', message: 'TODO: add()' } };
+    let urlParts = this._getUrlParts(longUrl);
+    if (urlParts.error) { return urlParts.error; }
+    if (urlParts.domain === this.SHORTENER_DOMAIN) {
+      this._setErrMsg(urlParts, 'DOMAIN_EQ');
+      return urlParts.error;
+    }
+    if (this.LONG_ACCESS[urlParts.url]) {
+      this.LONG_ACCESS[urlParts.url].active = true;
+      return { value: this.LONG_ACCESS[urlParts.url].shortUrl }
+    };
+    let shortRest = this.URL_MAP[urlParts.domainRest];
+    if (!shortRest) { 
+      shortRest = '/'+Math.floor(Math.random()*2**32).toString(36);
+      this.URL_MAP[urlParts.domainRest] = shortRest;
+    }
+    let shortUrl = urlParts.scheme+this.SHORTENER_DOMAIN+shortRest;
+    let urlInfo = { longUrl: urlParts.url, shortUrl: shortUrl, active: true, queries: 0};
+    console.log(urlParts.url);
+    this.LONG_ACCESS[urlInfo.longUrl] = urlInfo;
+    this.SHORT_ACCESS[urlInfo.shortUrl] = urlInfo;
+    return { value: shortUrl};
   }
   
   /** The argument shortUrl must be a shortened URL previously
@@ -74,8 +95,18 @@ class UrlShortener {
    *                 service.
    */
   query(shortUrl) {
-    //@TODO
-    return { error: { code: 'TODO', message: 'TODO: query()' } };
+    let urlParts = this._getUrlParts(shortUrl);
+    if (urlParts.error) { return urlParts.error; }
+    if (urlParts.domain !== this.SHORTENER_DOMAIN) {
+      this._setErrMsg(urlParts, 'DOMAIN_NE');
+      return urlParts.error;
+    }
+    if (!this.SHORT_ACCESS[urlParts.url] || !this.SHORT_ACCESS[urlParts.url].active) {
+      this._setErrMsg(urlParts, 'NOT_FOUND');
+      return urlParts.error;
+    }
+    this.SHORT_ACCESS[urlParts.url].queries++;
+    return { value: this.SHORT_ACCESS[urlParts.url].longUrl };
   }
 
 
@@ -96,8 +127,18 @@ class UrlShortener {
    *   'NOT_FOUND':  url was never registered for this service.
    */
   count(url) {
+    let urlParts = this._getUrlParts(url);
+    if (urlParts.error) { return urlParts.error; }
+    if (!this.LONG_ACCESS[urlParts.url] && !this.SHORT_ACCESS[urlParts.url]) {
+      this._setErrMsg(urlParts, 'NOT_FOUND');
+      return urlParts.error;
+    }
+    let query;
+    if (this.LONG_ACCESS[urlParts.url]) { query = this.LONG_ACCESS[urlParts.url].queries; }
+    else { query = this.SHORT_ACCESS[urlParts.url].queries; }
+    return { value: query }
     //@TODO
-    return { error: { code: 'TODO', message: 'TODO: count()' } };
+    //return { error: { code: 'TODO', message: 'TODO: count()' } };
   }
 
   /** The argument url must be one of a previously added (longUrl,
@@ -116,13 +157,61 @@ class UrlShortener {
    *   'NOT_FOUND':  url was never registered for this service.
    */
   remove(url) {
+    let urlParts = this._getUrlParts(url);
+    if (urlParts.error) { return urlParts.error; }
+    if (!this.LONG_ACCESS[urlParts.url] && !this.SHORT_ACCESS[urlParts.url]) {
+      this._setErrMsg(urlParts, 'NOT_FOUND');
+      return urlParts.error;
+    }
+    if (this.LONG_ACCESS[urlParts.url]) { this.LONG_ACCESS[urlParts.url].active = false; }
+    else { query = this.SHORT_ACCESS[urlParts.url].active = false; }
+    return {};
     //@TODO
-    return { error: { code: 'TODO', message: 'TODO: remove()' } };
+    //return { error: { code: 'TODO', message: 'TODO: remove()' } };
   }
 
   //@TODO add auxiliary methods here; prefix their names with _, to
   //indicate "private".
-   
+
+  _getUrlParts(url) {
+    let retObj = { scheme: null, domain: null, rest: null, domainRest: null, error: null, url: url };
+    let ind0 = url.indexOf('://')+3;
+    if (ind0 === 2 || ind0 === 3 || url.length === ind0 || url[ind0] === '/') {
+      this._setErrMsg(retObj, 'URL_SYNTAX');
+      return retObj;
+    }
+    retObj.scheme = url.substring(0,ind0).toLowerCase();
+    let ind1 = url.substring(ind0).indexOf('/');
+    if (ind1 === -1) {
+      retObj.domain = url.substring(ind0).toLowerCase();
+      retObj.domainRest = retObj.domain;
+    } else {
+      retObj.domain = url.substring(ind0, ind0+ind1).toLowerCase();
+      retObj.rest = url.substring(ind0+ind1);
+      retObj.domainRest = retObj.domain+retObj.rest;
+    }
+    retObj.url = retObj.scheme+retObj.domainRest;
+    return retObj;
+  }
+
+  _setErrMsg(urlParts, errMsg) {
+    switch (errMsg) {
+      case 'URL_SYNTAX':
+        urlParts.error = { error: { code: 'URL_SYNTAX', message: `URL_SYNTAX: bad url ${urlParts.url}` } };
+        break;
+      case 'DOMAIN_EQ':
+        urlParts.error = { error: { code: 'DOMAIN', message: `DOMAIN: domain ${urlParts.domain} equal to ${this.SHORTENER_DOMAIN}` } };
+        break;
+      case 'DOMAIN_NE':
+        urlParts.error = { error: { code: 'DOMAIN', message: `DOMAIN: domain of url ${urlParts.domain} not equal to ${this.SHORTENER_DOMAIN}` } };
+        break;
+      case 'NOT_FOUND':
+        urlParts.error = { error: { code: 'NOT_FOUND', message: `NOT_FOUND: ${urlParts.url} not found` } };
+        break;
+      default:
+        urlParts.error = { error: { code: 'UNKNOWN', message: `UNKNOWN: unknown error, something went wrong :(` } };
+    }
+  }
 }
 
 //UrlShortener class as only export
@@ -131,5 +220,4 @@ module.exports = UrlShortener
 //@TODO Add auxiliary functions here which do not need access to a
 //UrlShortener instance; they may be called from methods without
 //needing to be prefixed with `this`.
-  
 
