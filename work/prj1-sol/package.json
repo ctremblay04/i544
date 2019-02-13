@@ -1,7 +1,7 @@
 {
   "name": "prj1-sol",
   "version": "1.0.0",
-  "description": "",
+  "description": "Name:\t\tConnor Tremblay B-Number:\tB00667337 Email:\t\tctrembl1@binghamton.edu",
   "main": "index.js",
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
