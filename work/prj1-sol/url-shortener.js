@@ -160,7 +160,7 @@ class UrlShortener {
       return urlParts.error;
     }
     if (this.LONG_ACCESS[urlParts.domainRest]) { this.LONG_ACCESS[urlParts.domainRest].active = false; }
-    else { query = this.SHORT_ACCESS[urlParts.domainRest].active = false; }
+    else { this.SHORT_ACCESS[urlParts.domainRest].active = false; }
     return {};
   }
 
