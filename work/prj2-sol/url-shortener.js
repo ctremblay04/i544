@@ -61,6 +61,7 @@ class UrlShortener {
   constructor(base, client, db) {
     this.SHORTENER_BASE = base;
     this.db = db;
+    this.col = this.db.collection(URL_TABLE);
     this.client = client;
   }
 
@@ -73,8 +74,8 @@ class UrlShortener {
 
   /** Clear database */
   async clear() {
-    //@TODO
-    return { code: 'UNIMPLEMENTED', message: 'clear() not implemented' };
+    this.col.deleteMany({});
+    return {};
   }
 
 
@@ -98,6 +99,18 @@ class UrlShortener {
    */
   async add(longUrl) {
     //@TODO
+    let urlParts = getUrlParts(longUrl);
+    if (urlParts.error) //URL_SYNTAX
+      return urlParts.error;
+
+    if (urlParts.domain === this.SHORTENER_BASE) { //DOMAIN
+      this.setErrMsg(urlParts, 'DOMAIN_EQ');
+      return urlParts.error;
+    }
+    
+    this.col.insertOne({'longUrl':longUrl});
+    let urlInfo = this._queryDb(longUrl);
+    console.log(urlInfo);
     return { code: 'UNIMPLEMENTED', message: 'add() not implemented' };
   }
 
@@ -142,7 +155,6 @@ class UrlShortener {
    *   'NOT_FOUND':  url was never registered for this service.
    */
   async count(url) {
-    //@TODO
     return { code: 'UNIMPLEMENTED', message: 'count() not implemented' };
   }
 
@@ -174,12 +186,29 @@ class UrlShortener {
       case 'NOT_FOUND':
         urlParts.error = { error: { code: 'NOT_FOUND', message: 'TODO' } };;
         break;
-      case 'DOMAIN':
-        urlParts.error = { error: { code: 'DOMAIN', message: 'TODO' } };;
+      case 'DOMAIN_NE':
+        urlParts.error = { error: { code: 'DOMAIN_NE', message: 'TODO' } };;
+        break;
+      case 'DOMAIN_EQ':
+        urlParts.error = { error: { code: 'DOMAIN_EQ', message: 'TODO' } };;
         break;
       default:
         urlParts.error = { error: { code: 'UNKNOWN', message: `UNKNOWN: unknown error, something went wrong :(` } };
     }
+  }
+
+  _queryDb(url) {
+    /*const p = this.col.findOne({$or: [{"longUrl":url}, {"shortUrl":url}]});
+    const q = {};
+    p.then(function (result, q) { q = result;});
+    //if (q.length === 0)
+    //  return null;
+    //return q[0];
+    return q;*/
+    let a = this.col.findOne();
+    console.log(a);
+  }
+
 }
 
 module.exports = UrlShortener
@@ -189,7 +218,9 @@ module.exports = UrlShortener
 const MONGO_OPTIONS = {
   useNewUrlParser: true
 };
-  
+
+const URL_TABLE = 'urlInfo';
+
 //private utility functions can go here.
 function getUrlParts(url) {
   function setErrMsg(urlParts) {
