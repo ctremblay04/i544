@@ -48,7 +48,8 @@ class UrlShortener {
    */
   static async make(mongoDbUrl, shortenerBase) {
     let mongoParts = getUrlParts(mongoDbUrl);
-    if (mongoParts.error || mongoParts.scheme !== 'mongodb')
+    validateScheme(mongoParts, RegExp('^mongodb$'));
+    if (mongoParts.error)
       return { error: { code: 'BAD_MONGO_URL', message: `BAD_MONGO_URL: mongodbUrl is invlid ${mongoParts.url}` } };
     if (!validateBase(shortenerBase))
       return { error: { code: 'BAD_SHORTENER_BASE', message: `BAD_SHORTENER_BASE: shortenerBase is invlid ${shortenerBase}` } };
@@ -74,7 +75,7 @@ class UrlShortener {
 
   /** Clear database */
   async clear() {
-    this.col.deleteMany({});
+    await this.col.deleteMany({});
     return {};
   }
 
@@ -98,20 +99,24 @@ class UrlShortener {
    *   'DOMAIN':     base of longUrl is equal to shortUrl base.
    */
   async add(longUrl) {
-    //@TODO
     let urlParts = getUrlParts(longUrl);
+    validateScheme(urlParts, RegExp('^https?$'));
     if (urlParts.error) //URL_SYNTAX
       return urlParts.error;
-
     if (urlParts.domain === this.SHORTENER_BASE) { //DOMAIN
       this.setErrMsg(urlParts, 'DOMAIN_EQ');
       return urlParts.error;
     }
-    
-    this.col.insertOne({'longUrl':longUrl});
-    let urlInfo = this._queryDb(longUrl);
-    console.log(urlInfo);
-    return { code: 'UNIMPLEMENTED', message: 'add() not implemented' };
+    let urlInfo = await this._queryDb(urlParts.baseRest);
+    if ( urlInfo ) {
+      await this.col.updateOne(urlInfo, { $set: { active: true } } );
+    }
+    else {
+      let newUrl = this.SHORTENER_BASE+'/'+Math.floor(Math.random()*2**32).toString(36);
+      urlInfo = { longUrl: urlParts.baseRest, shortUrl: newUrl, active : true, queries : 0 };
+      await this.col.insertOne(urlInfo);
+    }
+    return { value : urlParts.scheme + '://' + urlInfo.shortUrl };
   }
 
   /** The argument shortUrl must be a shortened URL previously
@@ -133,8 +138,21 @@ class UrlShortener {
    *                 service.
    */
   async query(shortUrl) {
-    //@TODO
-    return { code: 'UNIMPLEMENTED', message: 'query() not implemented' };
+    let urlParts = getUrlParts(shortUrl);
+    validateScheme(urlParts, RegExp('^https?$'));
+    if (urlParts.error) //URL_SYNTAX
+      return urlParts.error;
+    if (urlParts.domain !== this.SHORTENER_BASE) { //DOMAIN
+      this._setErrMsg(urlParts, 'DOMAIN_NE');
+      return urlParts.error;
+    }
+    let urlInfo = await this._queryDb(urlParts.baseRest);
+    if (!urlInfo || !urlInfo.active) { //NOT_FOUND
+      this._setErrMsg(urlParts, 'NOT_FOUND');
+      return urlParts.error;
+    }
+    await this.col.updateOne(urlInfo, {$set: { queries: urlInfo.queries+1 } } );
+    return { value: urlParts.scheme+'://'+urlInfo.longUrl};
   }
 
 
@@ -155,7 +173,16 @@ class UrlShortener {
    *   'NOT_FOUND':  url was never registered for this service.
    */
   async count(url) {
-    return { code: 'UNIMPLEMENTED', message: 'count() not implemented' };
+    let urlParts = getUrlParts(url);
+    validateScheme(urlParts, RegExp('^https?$'));
+    if (urlParts.error) //URL_SYNTAX
+      return urlParts.error;
+    let urlInfo = await this._queryDb(urlParts.baseRest);
+    if (!urlInfo) { // NOT_FOUND
+      this._setErrMsg(urlParts, 'NOT_FOUND');
+      return urlParts.error;
+    }
+    return { value: urlInfo.queries};
   }
 
   
@@ -175,40 +202,44 @@ class UrlShortener {
    *   'NOT_FOUND':  url was never registered for this service.
    */
   async deactivate(url) {
-    //@TODO
-    return { code: 'UNIMPLEMENTED', message: 'deactivate() not implemented' };
+    let urlParts = getUrlParts(url);
+    validateScheme(urlParts, RegExp('^https?$'));
+    if (urlParts.error) //URL_SYNTAX
+      return urlParts.error;
+    let urlInfo = await this._queryDb(urlParts.baseRest);
+    if (!urlInfo) { // NOT_FOUND
+      this._setErrMsg(urlParts, 'NOT_FOUND');
+      return urlParts.error;
+    }
+    await this.col.updateOne(urlInfo, {$set: { active: false } } );
+    return {};
   }
 
   //private utility methods can go here.
-
+  
+  //For error messages which are specific to an instance of UrlShortener
   _setErrMsg(urlParts, errMsg) {
     switch (errMsg) {
-      case 'NOT_FOUND':
-        urlParts.error = { error: { code: 'NOT_FOUND', message: 'TODO' } };;
+      case 'DOMAIN_EQ':
+        urlParts.error = { error: { code: 'DOMAIN', message: `DOMAIN: domain ${urlParts.domain} equal to ${this.SHORTENER_BASE}` } };
         break;
       case 'DOMAIN_NE':
-        urlParts.error = { error: { code: 'DOMAIN_NE', message: 'TODO' } };;
+        urlParts.error = { error: { code: 'DOMAIN', message: `DOMAIN: domain of url ${urlParts.domain} not equal to ${this.SHORTENER_BASE}` } };
         break;
-      case 'DOMAIN_EQ':
-        urlParts.error = { error: { code: 'DOMAIN_EQ', message: 'TODO' } };;
+      case 'NOT_FOUND':
+        urlParts.error = { error: { code: 'NOT_FOUND', message: `NOT_FOUND: ${urlParts.url} not found` } };
         break;
       default:
         urlParts.error = { error: { code: 'UNKNOWN', message: `UNKNOWN: unknown error, something went wrong :(` } };
     }
   }
-
-  _queryDb(url) {
-    /*const p = this.col.findOne({$or: [{"longUrl":url}, {"shortUrl":url}]});
-    const q = {};
-    p.then(function (result, q) { q = result;});
-    //if (q.length === 0)
-    //  return null;
-    //return q[0];
-    return q;*/
-    let a = this.col.findOne();
-    console.log(a);
+  
+  //Return the value inside of a promise when querying the mongodb database
+  async _queryDb(url) {
+    return await this.col.findOne({$or: [{longUrl:url}, {shortUrl:url}]})
+                     .then( function (result) { return result; } )
+                     .catch( function (err) { return null; } );
   }
-
 }
 
 module.exports = UrlShortener
@@ -222,14 +253,13 @@ const MONGO_OPTIONS = {
 const URL_TABLE = 'urlInfo';
 
 //private utility functions can go here.
+
+//Seperate url string into it's parts so that it can be more easily utilized.
 function getUrlParts(url) {
-  function setErrMsg(urlParts) {
-    urlParts.error = { error: { code: 'URL_SYNTAX', message: `URL_SYNTAX: bad url ${urlParts.url}` } };
-  }
   let retObj = { scheme: null, base: null, domain: null, rest: null, baseRest: null , url: url, error: null};
   let ind0 = url.indexOf('://')+3;
   if (ind0 === 2 || ind0 === 3 || url.length === ind0 || url[ind0] === '/') {
-    setErrMsg(retObj);
+    setUrlSyntaxError(retObj);
     return retObj;
   }
   
@@ -243,7 +273,7 @@ function getUrlParts(url) {
     retObj.rest = url.substring(ind0+ind1);
   }
   if (!validateBase(retObj.base)) {
-    setErrMsg(retObj);
+    setUrlSyntaxError(retObj);
     return retObj;
   }      
   let ind2 = retObj.base.indexOf(':');
@@ -254,6 +284,18 @@ function getUrlParts(url) {
   return retObj;
 }
 
+//Set a urlParts instance error to a URL_SYNTAX error
+function setUrlSyntaxError(urlParts) {
+  urlParts.error = { error: { code: 'URL_SYNTAX', message: `URL_SYNTAX: bad url ${urlParts.url}` } };
+}
+
+//Make sure scheme matches passed in regex, otherwise call SetUrlSyntaxError on urlParts
+function validateScheme(urlParts, regex) {
+  if (!regex.test(urlParts.scheme))
+    setUrlSyntaxError(urlParts);
+}
+
+//Return a boolean value for if the base is valid or not
 function validateBase(base) {
   let ind0 = base.indexOf(':');
   if (ind0 === -1)
