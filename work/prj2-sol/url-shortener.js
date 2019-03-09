@@ -304,8 +304,14 @@ function validateBase(base) {
     let portNum = parseInt(base.substring(ind0+1));
       if (isNaN(portNum) || portNum < 1 || portNum >= 2**16)
         return false;
-  }
-  let domain = base.substring(0,ind0);
-  return RegExp('^[a-zA-Z0-9\.\-]+$').test(domain) && domain[0] !== '-' && domain[domain.length-1] !== '-';
+  } 
+  let parts = base.substring(0,ind0).split('.'); 
+  for (const part of parts) {
+    if (!(RegExp('^[a-zA-Z0-9\.\-]+$').test(part) && part[0] !== '-' && part[part.length-1] !== '-'))
+      return false;
+  } 
+  return base.length < 254;
 }
+
+
 
