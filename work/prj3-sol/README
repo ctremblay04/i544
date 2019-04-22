@@ -1,0 +1,16 @@
+The solution has the following changes over the requirements:
+
+  + The `~` tilde character has been added to the list of characters
+    which can continue a URL.
+
+  + The service recognizes an optional `isHtml` property in the
+    input JSON.  If the value of this property is truthy, then:
+
+      + All shortened URL's in the returned text are returned
+        as HTML `<a>` links.
+
+      + Any HTML meta-characters are escaped using the usual
+        HTML escape sequences.
+
+   
+
