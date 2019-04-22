@@ -1,0 +1,8 @@
+Name:		Connor Tremblay
+B-Number:	B00667337
+Email:		ctrembl1@binghamton.edu
+
+Implemented using the http://zdu.binghamton.edu:2345 server. 
+I was not able to achieve persistent behaivor so the reload button prompts
+the user with a "confirm form resubmission" message.
+
